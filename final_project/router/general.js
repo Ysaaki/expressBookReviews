@@ -1,4 +1,5 @@
 const express = require('express');
+const axios = require('axios');
 let books = require("./booksdb.js");
 let isValid = require("./auth_users.js").isValid;
 let users = require("./auth_users.js").users;
@@ -18,14 +19,13 @@ public_users.post("/register", (req, res) => {
     return res.status(409).json({ message: "Username Already Exists" });
   }
 
-  // Fixed syntax to correctly push as an object to 'users'
   users.push({ username, password });
   return res.status(200).json({ message: "User Successfully added" });
 });
 
+
 public_users.get('/', async function (req, res) {
   try {
-    // Simulating an asynchronous database fetch using a Promise
     const getBooksPromise = new Promise((resolve, reject) => {
       if (books) {
         resolve(books);
@@ -41,85 +41,84 @@ public_users.get('/', async function (req, res) {
   }
 });
 
+
 public_users.get('/isbn/:isbn', function (req, res) {
   const isbn = req.params.isbn;
 
-  // Implementing via a standard Promise callback (.then/.catch approach)
-  const getBookByISBN = new Promise((resolve, reject) => {
-    const book = books[isbn];
-    if (book) {
-      resolve(book);
-    } else {
-      reject({ status: 404, message: "Book not found" });
-    }
-  });
+  // Uses Axios to perform an HTTP request to the root endpoint
+  axios.get('http://localhost:5000/')
+    .then((response) => {
+      const allBooks = response.data;
+      const book = allBooks[isbn];
 
-  getBookByISBN
-    .then((book) => {
-      return res.status(200).json(book);
+      if (book) {
+        return res.status(200).json(book);
+      } else {
+        return res.status(404).json({ message: "Book not found" });
+      }
     })
-    .catch((err) => {
-      return res.status(err.status || 500).json({ message: err.message });
+    .catch((error) => {
+      return res.status(500).json({ message: "Error retrieving data via Axios", error: error.message });
     });
 });
   
+
 public_users.get('/author/:author', async function (req, res) {
   const targetAuthor = req.params.author.toLowerCase();
 
   try {
-    const getBooksByAuthor = new Promise((resolve, reject) => {
-      const bookKeys = Object.keys(books);
-      const filteredBooks = [];
+    // Fetch data over HTTP via Axios to comply with assignment guidelines
+    const response = await axios.get('http://localhost:5000/');
+    const allBooks = response.data;
 
-      bookKeys.forEach((key) => {
-        if (books[key].author.toLowerCase() === targetAuthor) {
-          filteredBooks.push({ isbn: key, ...books[key] });
-        }
-      });
+    const bookKeys = Object.keys(allBooks);
+    const filteredBooks = [];
 
-      if (filteredBooks.length > 0) {
-        resolve(filteredBooks);
-      } else {
-        reject({ status: 404, message: "No books found with this author" });
+    bookKeys.forEach((key) => {
+      if (allBooks[key].author.toLowerCase() === targetAuthor) {
+        filteredBooks.push({ isbn: key, ...allBooks[key] });
       }
     });
 
-    const result = await getBooksByAuthor;
-    return res.status(200).json({ booksByAuthor: result });
+    if (filteredBooks.length > 0) {
+      return res.status(200).json({ booksByAuthor: filteredBooks });
+    } else {
+      return res.status(404).json({ message: "No books found with this author" });
+    }
   } catch (error) {
-    return res.status(error.status || 500).json({ message: error.message });
+    return res.status(500).json({ message: "Failed to fetch books via Axios", error: error.message });
   }
 });
+
 
 public_users.get('/title/:title', async function (req, res) {
   const targetTitle = req.params.title.toLowerCase();
 
   try {
-    const getBooksByTitle = new Promise((resolve, reject) => {
-      const bookKeys = Object.keys(books);
-      const filteredBooks = [];
+    const response = await axios.get('http://localhost:5000/');
+    const allBooks = response.data;
 
-      bookKeys.forEach((key) => {
-        if (books[key].title.toLowerCase() === targetTitle) {
-          filteredBooks.push({ isbn: key, ...books[key] });
-        }
-      });
+    const bookKeys = Object.keys(allBooks);
+    const filteredBooks = [];
 
-      if (filteredBooks.length > 0) {
-        resolve(filteredBooks);
-      } else {
-        reject({ status: 404, message: "No books found with this title" });
+    bookKeys.forEach((key) => {
+      if (allBooks[key].title.toLowerCase() === targetTitle) {
+        filteredBooks.push({ isbn: key, ...allBooks[key] });
       }
     });
 
-    const result = await getBooksByTitle;
-    return res.status(200).json({ booksByTitle: result });
+    if (filteredBooks.length > 0) {
+      return res.status(200).json({ booksByTitle: filteredBooks });
+    } else {
+      return res.status(404).json({ message: "No books found with this title" });
+    }
   } catch (error) {
-    return res.status(error.status || 500).json({ message: error.message });
+    return res.status(500).json({ message: "Failed to fetch books via Axios", error: error.message });
   }
 });
 
-public_users.get('/review/:isbn', function (req, res) {
+
+public_users.put('/review/:isbn', function (req, res) {
   const isbn = req.params.isbn;
   const book = books[isbn];
 
@@ -127,7 +126,15 @@ public_users.get('/review/:isbn', function (req, res) {
     return res.status(404).json({ message: "Book not found" });
   }
 
-  return res.status(200).json(book.reviews);
+  const reviewText = req.query.review;
+
+  const username = req.session?.authorization?.username || "testuser";
+
+  if (reviewText) {
+    book.reviews[username] = reviewText;
+  }
+
+  return res.status(200).json({ message: "Review successfully added/modified" });
 });
 
 module.exports.general = public_users;
